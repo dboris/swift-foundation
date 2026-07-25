@@ -83,7 +83,25 @@ public struct FileProtectionType : RawRepresentable, Sendable {
     public static let inactive = Self(rawValue: "NSFileProtectionCompleteWhenUserInactive")
 }
 
-extension FileManager {
+// WINCAT (win-catalyst readium backlog item 9): the class is declared under the
+// fork-private name `_FEFileManager`; the `FileManager` spelling is a TYPEALIAS
+// whose visibility is conditional. Vanilla builds are unchanged (public
+// typealias -> same public surface). Under WINCAT_OBJC_FILEMANAGER the alias is
+// internal: FE's own sources keep compiling against it, but the module no longer
+// EXPORTS the `FileManager` name -- vacating it so the complete ObjC
+// NSFileManager (apinotes-renamed to `FileManager`, Apple's actual shape) can be
+// the one canonical FileManager without 'ambiguous for type lookup' collisions.
+// Public decls in this module therefore must NOT name the alias in their
+// signatures; they spell `_FEFileManager` (or the bare nested-type name).
+#if WINCAT_OBJC_FILEMANAGER
+internal typealias FileManager = _FEFileManager
+internal typealias FileManagerDelegate = _FEFileManagerDelegate
+#else
+public typealias FileManager = _FEFileManager
+public typealias FileManagerDelegate = _FEFileManagerDelegate
+#endif
+
+extension _FEFileManager {
     public struct UnmountOptions : OptionSet, Sendable {
         public let rawValue: UInt
         
@@ -176,13 +194,13 @@ extension FileManager {
     }
 }
 
-open class FileManager : @unchecked Sendable {
+open class _FEFileManager : @unchecked Sendable {
     // Sendable note: _impl may only be mutated in `init`
     private var _impl: _FileManagerImpl
     private let _lock = LockedState<State>(initialState: .init(delegate: nil))
     
     private static let _default = FileManager()
-    open class var `default`: FileManager {
+    open class var `default`: _FEFileManager {
         _default
     }
     
@@ -190,7 +208,7 @@ open class FileManager : @unchecked Sendable {
         weak var delegate: (any FileManagerDelegate)?
     }
 
-    open weak var delegate: (any FileManagerDelegate)? {
+    open weak var delegate: (any _FEFileManagerDelegate)? {
         get {
             _lock.withLock { $0.delegate }
         }
@@ -224,11 +242,11 @@ open class FileManager : @unchecked Sendable {
         try _impl.subpathsOfDirectory(atPath: path)
     }
     
-    open func urls(for directory: FileManager.SearchPathDirectory, in domainMask: FileManager.SearchPathDomainMask) -> [URL] {
+    open func urls(for directory: SearchPathDirectory, in domainMask: SearchPathDomainMask) -> [URL] {
         _impl.urls(for: directory, in: domainMask)
     }
     
-    open func url(for directory: FileManager.SearchPathDirectory, in domain: FileManager.SearchPathDomainMask, appropriateFor url: URL?, create shouldCreate: Bool) throws -> URL {
+    open func url(for directory: SearchPathDirectory, in domain: SearchPathDomainMask, appropriateFor url: URL?, create shouldCreate: Bool) throws -> URL {
         try _impl.url(for: directory, in: domain, appropriateFor: url, create: shouldCreate)
     }
 

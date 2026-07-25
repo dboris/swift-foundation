@@ -1700,6 +1700,13 @@ extension URL {
     @available(watchOS, unavailable)
     public static var trashDirectory: URL { url(for: .trashDirectory, in: .userDomainMask) }
 
+    // WINCAT: under WINCAT_OBJC_FILEMANAGER the `FileManager` alias is internal
+    // (see SwiftFileManager.swift), so this public init cannot name its nested
+    // types. It is gated out and re-vended by the WinCatalyst overlay stack
+    // (NSDateInterop) over the canonical ObjC FileManager's nested enums --
+    // keeping it here spelled `_FEFileManager.*` would make contextual
+    // `.documentDirectory` calls ambiguous against that re-vend.
+    #if !WINCAT_OBJC_FILEMANAGER
     @available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *)
     public init(
         for directory: FileManager.SearchPathDirectory,
@@ -1714,6 +1721,7 @@ extension URL {
             create: shouldCreate
         )
     }
+    #endif
 
     @inline(__always)
     @available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *)
