@@ -71,3 +71,32 @@ mach_port_t _platform_mach_task_self(void) {
 }
 #endif
 
+
+// WINCATALYST: see platform_shims.h. `persist.sys.locale` is what Android's
+// Settings app writes; the ObjC half of this seam
+// (Frameworks/Platform/posix/PlatformLocale_Posix.cpp) reads the same two
+// properties, and the two stores are gated to agree.
+#if TARGET_OS_ANDROID
+#include <string.h>
+#include <sys/system_properties.h>
+#endif
+
+size_t _wincat_shims_android_system_property(const char *name, char *out, size_t out_len) {
+#if TARGET_OS_ANDROID
+    if (out_len == 0) {
+        return 0;
+    }
+    char value[PROP_VALUE_MAX];
+    const int len = __system_property_get(name, value);
+    if (len <= 0 || (size_t)len + 1 > out_len) {
+        return 0;
+    }
+    memcpy(out, value, (size_t)len + 1);
+    return (size_t)len;
+#else
+    (void)name;
+    (void)out;
+    (void)out_len;
+    return 0;
+#endif
+}
