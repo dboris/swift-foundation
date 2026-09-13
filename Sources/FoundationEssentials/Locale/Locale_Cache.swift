@@ -285,19 +285,39 @@ struct LocaleCache : Sendable, ~Copyable {
         return preferredLocaleID
     }
 #else
+    // WINCATALYST FORK CHANGE. Upstream answers these three with the constants
+    // `en_001` / `["en-001"]`, unconditionally, on every non-Darwin platform --
+    // so `Locale.current` never followed the host and every `FormatStyle` with
+    // no explicit locale formatted numbers, dates, currency and measurements the
+    // American way even for a user whose UI was already in their own language.
+    // `_WinCatalystHostLocale` (Locale_WinCatalystHost.swift) asks the host, and
+    // its header explains why that is a second implementation of a fact this
+    // stack also answers in C++ and how the two are kept honest.
+    //
+    // ⚠️ THE CONSTANTS REMAIN AS THE NO-PREFERENCE FALLBACK, and deliberately so:
+    // an unconfigured POSIX login really does express no language, and `en_001`
+    // ("English, world") is upstream's answer for that. Substituting `en_US`
+    // would make "the user chose nothing" indistinguishable from "the user chose
+    // American English", which is the difference the resourcetest gate's unset
+    // leg exists to see.
     func preferences() -> (LocalePreferences, Bool) {
         var prefs = LocalePreferences()
-        prefs.locale = "en_001"
-        prefs.languages = ["en-001"]
+        prefs.locale = _WinCatalystHostLocale.localeIdentifier ?? "en_001"
+        let languages = _WinCatalystHostLocale.preferredLanguages
+        prefs.languages = languages.isEmpty ? ["en-001"] : languages
         return (prefs, true)
     }
 
     func preferredLanguages(forCurrentUser: Bool) -> [String] {
-        [Locale.canonicalLanguageIdentifier(from: "en-001")]
+        let languages = _WinCatalystHostLocale.preferredLanguages
+        guard !languages.isEmpty else {
+            return [Locale.canonicalLanguageIdentifier(from: "en-001")]
+        }
+        return languages.compactMap { Locale.canonicalLanguageIdentifier(from: $0) }
     }
 
     func preferredLocale() -> String? {
-        "en_001"
+        _WinCatalystHostLocale.localeIdentifier ?? "en_001"
     }
 #endif
 

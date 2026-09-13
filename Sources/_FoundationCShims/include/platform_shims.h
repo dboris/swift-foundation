@@ -36,6 +36,23 @@ INTERNAL char * _Nullable * _Nullable _platform_shims_get_environ(void);
 INTERNAL void _platform_shims_lock_environ(void);
 INTERNAL void _platform_shims_unlock_environ(void);
 
+// WINCATALYST: one Android system property (`persist.sys.locale`), for
+// Locale_WinCatalystHost.swift.
+//
+// It is a C shim rather than a direct Swift call because `__system_property_get`
+// lives in <sys/system_properties.h>, which the Swift Android overlay does not
+// re-export -- upstream's own ProcessInfo.swift has the call written out in a
+// COMMENT for exactly that reason. Reaching it with `@_silgen_name` would work
+// and would also be an unsupported ABI assumption in a module that ships in an
+// SDK; a shim is the supported spelling and costs four lines.
+//
+// Writes at most `out_len` bytes including the NUL and returns the length
+// written, or 0 when the property is unset (and on every non-Android arm, where
+// the concept does not exist).
+INTERNAL size_t _wincat_shims_android_system_property(const char * _Nonnull name,
+                                                      char * _Nonnull out,
+                                                      size_t out_len);
+
 #if __has_include(<mach/vm_page_size.h>)
 #include <mach/vm_page_size.h>
 INTERNAL vm_size_t _platform_shims_vm_size(void);
