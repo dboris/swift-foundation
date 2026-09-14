@@ -179,12 +179,44 @@ struct _FTSSequence: Sequence {
                 return
             }
 
+            #if os(Android)
+            // NDK r27 (bionic) annotates fts_open as `char* _Nonnull const* _Nonnull __path`,
+            // so the ELEMENT imports non-optional and the (mandatory) NULL terminator
+            // cannot live in the array literal — `nil` is rejected. Build the argv as
+            // optionals (glibc's import shape) and rebind the buffer to the imported
+            // non-optional element type before handing it to fts_open. (glibc imports the
+            // element as optional, so the #else literal compiles there unchanged.)
+            //
+            // ⚠️ THIS BRANCH IS NDK-VERSION DEPENDENT, AND THE TWO FORMS ARE EXACTLY
+            // INVERTED. Measured 2026-09-14, swiftc 6.3.2, x86_64-unknown-linux-android24:
+            //
+            //     NDK r27d  `char* _Nonnull const*`   this branch ✓   #else literal ✗
+            //     NDK r28.2 `char* _Nullable const*`  this branch ✗   #else literal ✓
+            //
+            // bionic relaxed the annotation in r28, so from r28 on the element imports as
+            // optional, the plain literal compiles, and THIS code stops compiling with
+            //   cannot convert value of type 'UnsafePointer<UnsafeMutablePointer<CChar>>'
+            //   to expected argument type 'UnsafePointer<UnsafeMutablePointer<CChar>?>'
+            // Bumping WinCatalyst's Android NDK past r27 therefore means DELETING this
+            // branch, not adjusting it — and the failure will read as an unrelated Swift
+            // type error inside a vendored file, which is why it is spelled out here.
+            let _ftsArgv: [UnsafeMutablePointer<CChar>?] = [UnsafeMutablePointer(mutating: path), nil]
+            state = _ftsArgv.withUnsafeBufferPointer { optList in
+                optList.withMemoryRebound(to: UnsafeMutablePointer<CChar>.self) { dirList in
+                    guard let stream = fts_open(dirList.baseAddress!, opts, nil) else {
+                        return .error(errno, String(cString: path))
+                    }
+                    return .stream(stream)
+                }
+            }
+            #else
             state = [UnsafeMutablePointer(mutating: path), nil].withUnsafeBufferPointer { dirList in
                 guard let stream = fts_open(dirList.baseAddress!, opts, nil) else {
                     return .error(errno, String(cString: path))
                 }
                 return .stream(stream)
             }
+            #endif
         }
         
         deinit {
