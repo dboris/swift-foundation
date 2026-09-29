@@ -46,7 +46,12 @@ public struct Decimal: Sendable {
             return Int32(self.storage.exponent)
         }
         set {
-            self.storage.exponent = Int8(newValue)
+            // Truncate, as the framework build's C `NSDecimal` bitfield
+            // (`int _exponent:8`) does. The arithmetic relies on it: `_multiply`
+            // range-checks the product exponent only upward, so on Darwin
+            // 1e-100 * 1e-100 is 1e56 with `.noError`, where a trapping
+            // `Int8(newValue)` killed the process.
+            self.storage.exponent = Int8(truncatingIfNeeded: newValue)
         }
     }
 
