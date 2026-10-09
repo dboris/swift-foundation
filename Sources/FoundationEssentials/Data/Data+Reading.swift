@@ -200,26 +200,29 @@ private func read(from hFile: HANDLE, at path: PathOrURL,
     var pBuffer = pBuffer
     let progress = bProgress && Progress.current() != nil ? Progress(totalUnitCount: Int64(dwLength)) : nil
 
-    var dwBytesRemaining: DWORD = DWORD(dwLength)
-    while dwBytesRemaining > 0 {
+    // WinCatalyst (harmony/wincat): the remaining count is an Int, and only each ReadFile request is
+    // clamped to a DWORD. It was `DWORD(dwLength)` -- a TRAP for any file of 4 GiB or more (Core AI's
+    // compile cache for a 4B-parameter LLM is 8.5 GB; Data(contentsOf:) died with 0xC000001D before
+    // reading a byte). Upstream's OutputRawSpan rewrite of this function counts in Int the same way.
+    var bytesRemaining: Int = dwLength
+    while bytesRemaining > 0 {
         if let progress, progress.isCancelled {
             throw CocoaError(.userCancelled)
         }
 
-        let dwBytesToRead: DWORD =
-            DWORD(clamping: DWORD(min(DWORD(dwChunk), dwBytesRemaining)))
+        let dwBytesToRead: DWORD = DWORD(clamping: min(dwChunk, bytesRemaining))
         var dwBytesRead: DWORD = 0
         if !ReadFile(hFile, pBuffer, dwBytesToRead, &dwBytesRead, nil) {
             throw CocoaError.errorWithFilePath(path, win32: GetLastError(), reading: true)
         }
-        dwBytesRemaining -= DWORD(clamping: dwBytesRead)
-        progress?.completedUnitCount = Int64(dwLength - Int(dwBytesRemaining))
+        bytesRemaining -= Int(dwBytesRead)
+        progress?.completedUnitCount = Int64(dwLength - bytesRemaining)
         if dwBytesRead < dwBytesToRead {
             break
         }
         pBuffer = pBuffer.advanced(by: Int(dwBytesRead))
     }
-    return dwLength - Int(dwBytesRemaining)
+    return dwLength - bytesRemaining
 }
 #endif
 
