@@ -24,6 +24,24 @@ extension NotificationCenter {
 
 internal import Synchronization
 
+// WINCAT (the FileManager confinement's twin, SwiftFileManager.swift): the class is declared
+// under the fork-private name `_FENotificationCenter`; the `NotificationCenter` spelling is a
+// TYPEALIAS whose visibility is conditional. Vanilla builds are unchanged (public typealias ->
+// same public surface). Under WINCAT_OBJC_NOTIFICATIONCENTER the alias is internal: FE's own
+// sources -- every `extension NotificationCenter` carrying the typed-message API -- keep
+// compiling against it, but the module no longer EXPORTS the name, vacating it for the complete
+// ObjC NSNotificationCenter (apinotes-renamed to `NotificationCenter`, Apple's actual shape) and
+// ending 'NotificationCenter is ambiguous for type lookup' in every client that imports both.
+// Public decls must therefore not name the alias in their signatures; they spell
+// `_FENotificationCenter`. The typed-message API (MainActorMessage, AsyncMessage,
+// addObserver(of:for:), post(_:)) then lives on `_FENotificationCenter` only, until the
+// WinCatalyst overlay stack re-vends it over the ObjC class.
+#if WINCAT_OBJC_NOTIFICATIONCENTER
+internal typealias NotificationCenter = _FENotificationCenter
+#else
+public typealias NotificationCenter = _FENotificationCenter
+#endif
+
 // Dictionary storage with automatic key generation
 private struct AutoDictionary<Value> {
     private var storage: [UInt64: Value] = [:]
@@ -76,7 +94,7 @@ private struct MessageBox {
     let message: Any
 }
 
-open class NotificationCenter: @unchecked Sendable {
+open class _FENotificationCenter: @unchecked Sendable {
     private let registrar: Mutex<[String? /* Notification name */: [ObjectIdentifier? /* object */ : AutoDictionary<@Sendable (MessageBox) -> Void>]]>
     internal lazy var _actorQueueManager = _NotificationCenterActorQueueManager()
     
@@ -84,7 +102,7 @@ open class NotificationCenter: @unchecked Sendable {
         registrar = .init([:])
     }
     
-    open class var `default`: NotificationCenter {
+    open class var `default`: _FENotificationCenter {
         return _defaultCenter
     }
 
@@ -157,7 +175,7 @@ open class NotificationCenter: @unchecked Sendable {
 }
 
 extension NotificationCenter: Equatable {
-    public static func == (lhs: NotificationCenter, rhs: NotificationCenter) -> Bool {
+    public static func == (lhs: _FENotificationCenter, rhs: _FENotificationCenter) -> Bool {
         return lhs === rhs
     }
 }
